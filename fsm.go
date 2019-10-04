@@ -311,9 +311,13 @@ func (f *FSM) Event(event string, args ...interface{}) error {
 	if f.current == dst {
 		f.enterStateCallbacks(e)
 		f.afterEventCallbacks(e)
+
 		// setup the transition callback
-		f.transitionCallback = func() {
-			f.gettransitionCallback(e)
+		fn := f.gettransitionCallback(e)
+		if fn != nil {
+			f.transitionCallback = func() {
+				fn(e)
+			}
 		}
 		return NoTransitionError{e.Err}
 	}
