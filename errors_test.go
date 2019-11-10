@@ -16,6 +16,7 @@ package fsm
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -23,7 +24,7 @@ func TestInvalidEventError(t *testing.T) {
 	event := "invalid event"
 	state := "state"
 	e := InvalidEventError{Event: event, State: state}
-	if e.Error() != "event "+e.Event+" inappropriate in current state "+e.State {
+	if e.Error() != fmt.Sprintf("event %s inappropriate in current state %s", e.Event,e.State) {
 		t.Error("InvalidEventError string mismatch")
 	}
 }
@@ -31,7 +32,7 @@ func TestInvalidEventError(t *testing.T) {
 func TestUnknownEventError(t *testing.T) {
 	event := "invalid event"
 	e := UnknownEventError{Event: event}
-	if e.Error() != "event "+e.Event+" does not exist" {
+	if e.Error() != fmt.Sprintf("event %s does not exist", e.Event) {
 		t.Error("UnknownEventError string mismatch")
 	}
 }
@@ -39,7 +40,7 @@ func TestUnknownEventError(t *testing.T) {
 func TestInTransitionError(t *testing.T) {
 	event := "in transition"
 	e := InTransitionError{Event: event}
-	if e.Error() != "event "+e.Event+" inappropriate because previous transition did not complete" {
+	if e.Error() != fmt.Sprintf("event %s inappropriate because previous transition did not complete", e.Event) {
 		t.Error("InTransitionError string mismatch")
 	}
 }
@@ -62,16 +63,16 @@ func TestNoTransitionError(t *testing.T) {
 	}
 }
 
-func TestCanceledError(t *testing.T) {
-	e := CanceledError{}
-	if e.Error() != "transition canceled" {
-		t.Error("CanceledError string mismatch")
-	}
-	e.Err = errors.New("canceled")
-	if e.Error() != "transition canceled with error: "+e.Err.Error() {
-		t.Error("CanceledError string mismatch")
-	}
-}
+//func TestCanceledError(t *testing.T) {
+//	e := CanceledError{}
+//	if e.Error() != "transition canceled" {
+//		t.Error("CanceledError string mismatch")
+//	}
+//	e.Err = errors.New("canceled")
+//	if e.Error() != "transition canceled with error: "+e.Err.Error() {
+//		t.Error("CanceledError string mismatch")
+//	}
+//}
 
 func TestAsyncError(t *testing.T) {
 	e := AsyncError{}

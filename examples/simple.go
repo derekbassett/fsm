@@ -11,10 +11,10 @@ func main() {
 	fsm := fsm.NewFSM(
 		"closed",
 		fsm.Events{
-			{Name: "open", Src: []string{"closed"}, Dst: "open"},
-			{Name: "close", Src: []string{"open"}, Dst: "closed"},
+			{Label: "open", Src: fsm.States{"closed"}, Dst: "open"},
+			{Label: "close", Src: fsm.States{"open"}, Dst: "closed"},
 		},
-		fsm.Callbacks{},
+		fsm.Transitions{},
 	)
 
 	fmt.Println(fsm.Current())

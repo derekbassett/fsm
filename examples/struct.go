@@ -9,7 +9,7 @@ import (
 
 type Door struct {
 	To  string
-	FSM *fsm.FSM
+	FSM *fsm.EventTypeStateTypeFiniteStateMachine
 }
 
 func NewDoor(to string) *Door {
@@ -20,19 +20,22 @@ func NewDoor(to string) *Door {
 	d.FSM = fsm.NewFSM(
 		"closed",
 		fsm.Events{
-			{Name: "open", Src: []string{"closed"}, Dst: "open"},
-			{Name: "close", Src: []string{"open"}, Dst: "closed"},
+			{Label: "open", Src: fsm.States{"closed"}, Dst: "open"},
+			{Label: "close", Src: fsm.States{"open"}, Dst: "closed"},
 		},
-		fsm.Callbacks{
-			"enter_state": func(e *fsm.Event) { d.enterState(e) },
+		fsm.Transitions{
+			"enter_state": func(t fsm.Transition) error {
+				d.enterState(t)
+				return nil
+			},
 		},
 	)
 
 	return d
 }
 
-func (d *Door) enterState(e *fsm.Event) {
-	fmt.Printf("The door to %s is %s\n", d.To, e.Dst)
+func (d *Door) enterState(t fsm.Transition) {
+	fmt.Printf("The door to %s is %s\n", d.To, t.Dst())
 }
 
 func main() {
