@@ -71,7 +71,7 @@ type EventTypeStateTypeFiniteStateMachine struct {
 
 	// transition is the internal transition functions used either directly
 	// or when Transition is called in an asynchronous state transition.
-	transition func()
+	transition func() error
 	// transitionerObj calls the FSM's transition() function.
 	transitionerObj EventTypeEventStateTypeStateTransitioner
 
@@ -355,13 +355,18 @@ func (f *EventTypeStateTypeFiniteStateMachine) Event(event EventType, args ...in
 	}
 
 	// Setup the transition, call it later.
-	f.transition = func() {
+	f.transition = func() error {
 		f.stateMu.Lock()
 		f.current = dst
 		f.stateMu.Unlock()
 
-		f.enterStateCallbacks(t)
-		f.afterEventCallbacks(t)
+		if err := f.enterStateCallbacks(t); err != nil {
+			return err
+		}
+		if err := f.afterEventCallbacks(t); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if err = f.leaveStateCallbacks(t); err != nil {
@@ -376,7 +381,7 @@ func (f *EventTypeStateTypeFiniteStateMachine) Event(event EventType, args ...in
 	err = f.transitionerObj.Transition(f)
 	f.stateMu.RLock()
 	if err != nil {
-		return InternalError{}
+		return err
 	}
 
 	return t.Err()

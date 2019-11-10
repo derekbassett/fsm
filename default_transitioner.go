@@ -15,7 +15,9 @@ func (t defaultTransitioner) Transition(f *EventTypeStateTypeFiniteStateMachine)
 	if f.transition == nil {
 		return NotInTransitionError{}
 	}
-	f.transition()
+	if err := f.transition(); err != nil {
+		return err
+	}
 	f.transition = nil
 	return nil
 }
