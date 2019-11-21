@@ -47,7 +47,17 @@ type Transition interface {
 
 	// Err is an optional error that can be returned from a callback.
 	Err() error
+
+	// Args is a list of arguments
+	Args() []interface{}
 }
+
+// Callback is a function type that callbacks should use. Transition is the current
+// event info as the callback happens.
+type TransitionFunc func(Transition) error
+
+// Callbacks is a shorthand for defining the callbacks in NewFSM.
+type Transitions map[string]TransitionFunc
 
 // Canceled is the error returned by Context.Err when the context is canceled.
 var Canceled = errors.New("transition canceled")
@@ -70,6 +80,7 @@ type cancelTransition struct {
 	err error
 	// async is an internal flag set if the transition should be asynchronous
 	async bool
+	args []interface{}
 }
 
 func (c *cancelTransition) Event() EventType {
@@ -87,6 +98,8 @@ func (c *cancelTransition) Dst() StateType {
 	return c.dst
 }
 
+// Cancel can be called in before_<EVENT> or leave_<STATE> to cancel the
+// current transition before it happens.
 func (c *cancelTransition) Cancel() {
 	c.cancel(Canceled)
 }
@@ -134,6 +147,13 @@ func (c *cancelTransition) SetAsync() {
 	c.mu.Unlock()
 }
 
+func (c *cancelTransition) Args() []interface{} {
+	c.mu.Lock()
+	args := c.args
+	c.mu.Unlock()
+	return args
+}
+
 // Transition is the info that get passed as a reference in the callbacks.
 //type Transition struct {
 //
@@ -159,27 +179,4 @@ func (c *cancelTransition) SetAsync() {
 //	async bool
 //}
 
-// Cancel can be called in before_<EVENT> or leave_<STATE> to cancel the
-// current transition before it happens. It takes an optional error, which will
-// overwrite e.Err if set before.
-//func (e *Transition) Cancel(err ...error) {
-//	e.canceled = true
-//
-//	if len(err) > 0 {
-//		e.Err = err[0]
-//	}
-//}
 
-// Async can be called in leave_<STATE> to do an asynchronous state transition.
-//
-// The current state transition will be on hold in the old state until a final
-// call to Transition is made. This will complete the transition and possibly
-// call the other callbacks.
-//func (e *Transition) Async() {
-//	e.async = true
-//}
-
-//func (e *Transition) Current() StateType {
-//	// TODO
-//	return nil
-//}

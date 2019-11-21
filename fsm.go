@@ -28,9 +28,7 @@
 package fsm
 
 import (
-	"context"
 	"github.com/cheekybits/genny/generic"
-	"strings"
 	"sync"
 )
 
@@ -84,61 +82,48 @@ type EventTypeStateTypeFiniteStateMachine struct {
 type StateType generic.Type
 type EventType generic.Type
 
-type States []StateType
+type StateTypeStates []StateType
 
-// var Transitioner EventTypeEventStateTypeStateTransitioner = &defaultTransitioner{}
-
-// EventDesc represents an event when initializing the EventTypeStateTypeFiniteStateMachine.
+// Event represents an event when initializing the EventTypeStateTypeFiniteStateMachine.
 //
 // The event can have one or more source states that is valid for performing
 // the transition. If the FSM is in one of the source states it will end up in
 // the specified destination state, calling all defined callbacks as it goes.
-type Event struct {
+type EventTypeEvent struct {
 	// Name is the event name used when calling for a transition.
 	Label EventType
 
 	// Src is the source states that the EventTypeStateTypeFiniteStateMachine must be in to perform a
 	// state transition.
-	Src States
+	Src StateType
 
-	// Dst is the destination state that the EventTypeStateTypeFiniteStateMachine will be in if the transition
-	// succeeds.
+	// Dst is the destination state that the EventTypeStateTypeFiniteStateMachine will be in to perform the transition.
 	Dst StateType
-}
 
-// Callback is a function type that callbacks should use. Transition is the current
-// event info as the callback happens.
-type TransitionFunc func(Transition) error
+	// 1. before_<EVENT> - called before event named <EVENT>
+	//
+	BeforeEvent TransitionFunc
+
+	// 3. leave_<OLD_STATE> - called before leaving <OLD_STATE>
+	//
+	LeaveState TransitionFunc
+
+	// 5. enter_<NEW_STATE> - called after entering <NEW_STATE>
+	//
+	// 1. <NEW_STATE> - called after entering <NEW_STATE>
+	//
+	EnterState TransitionFunc
+
+	// 7. after_<EVENT> - called after event named <EVENT>
+	//
+	// 2. <EVENT> - called after event named <EVENT>
+	//
+	AfterEvent TransitionFunc
+
+}
 
 // Events is a shorthand for defining the transition map in NewFSM.
-type Events []Event
-
-// Callbacks is a shorthand for defining the callbacks in NewFSM.
-type Transitions map[string]TransitionFunc
-
-type key int
-
-var (
-	eventKey key
-	destKey key
-)
-
-// WithContext returns a new Context with the Event value e.
-func WithContext(ctx context.Context, e EventType) context.Context {
-	return context.WithValue(ctx, eventKey, e)
-}
-
-// EventFromContext returns the EventType value stored in ctx, if any.
-func EventFromContext(ctx context.Context) (EventType, bool) {
-	e, ok := ctx.Value(eventKey).(EventType)
-	return e, ok
-}
-
-//
-func DestinationFromContext(ctx context.Context) (StateType, bool) {
-	d, ok := ctx.Value(destKey).(StateType)
-	return d, ok
-}
+type EventTypeEvents []EventTypeEvent
 
 // NewFSM constructs a EventTypeStateTypeFiniteStateMachine from events and callbacks.
 //
@@ -176,7 +161,7 @@ func DestinationFromContext(ctx context.Context) (StateType, bool) {
 // which version of the callback will end up in the internal map. This is due
 // to the pseudo random nature of Go maps. No checking for multiple keys is
 // currently performed.
-func NewFSM(initial StateType, events Events, callbacks map[string]TransitionFunc) *EventTypeStateTypeFiniteStateMachine {
+func NewEventTypeStateTypeFiniteStateMachine(initial StateType, events EventTypeEvents) *EventTypeStateTypeFiniteStateMachine {
 	f := &EventTypeStateTypeFiniteStateMachine{
 		transitionerObj: &defaultTransitioner{},
 		current:         initial,
@@ -188,61 +173,73 @@ func NewFSM(initial StateType, events Events, callbacks map[string]TransitionFun
 	allEvents := make(map[EventType]struct{})
 	allStates := make(map[StateType]struct{})
 	for _, e := range events {
-		for _, src := range e.Src {
-			f.transitions[eKey{e.Label, src}] = e.Dst
-			allStates[src] = struct{}{}
-			allStates[e.Dst] = struct{}{}
-		}
+		src := e.Src
+		f.transitions[eKey{e.Label, src}] = e.Dst
+		allStates[src] = struct{}{}
+		allStates[e.Dst] = struct{}{}
 		allEvents[e.Label] = struct{}{}
-	}
-
-	// Map all callbacks to events/states.
-	for name, fn := range callbacks {
-		var target string
-		callbackType := callbackNone
-
-		switch {
-		case strings.HasPrefix(name, "before_"):
-			target = strings.TrimPrefix(name, "before_")
-			if target == "event" {
-				f.BeforeEvent = fn
-			} else if _, ok := allEvents[target]; ok {
-				callbackType = callbackBeforeEvent
-			}
-		case strings.HasPrefix(name, "leave_"):
-			target = strings.TrimPrefix(name, "leave_")
-			if target == "state" {
-				f.LeaveState = fn
-			} else if _, ok := allStates[target]; ok {
-				callbackType = callbackLeaveState
-			}
-		case strings.HasPrefix(name, "enter_"):
-			target = strings.TrimPrefix(name, "enter_")
-			if target == "state" {
-				f.EnterState = fn
-			} else if _, ok := allStates[target]; ok {
-				callbackType = callbackEnterState
-			}
-		case strings.HasPrefix(name, "after_"):
-			target = strings.TrimPrefix(name, "after_")
-			if target == "event" {
-				f.AfterEvent = fn
-			} else if _, ok := allEvents[target]; ok {
-				callbackType = callbackAfterEvent
-			}
-		default:
-			target = name
-			if _, ok := allStates[target]; ok {
-				callbackType = callbackEnterState
-			} else if _, ok := allEvents[target]; ok {
-				callbackType = callbackAfterEvent
-			}
+		if e.BeforeEvent != nil {
+			f.callbacks[cKey{e.Label, callbackBeforeEvent}] = e.BeforeEvent
+		}
+		if e.LeaveState != nil {
+			f.callbacks[cKey{ e.Src, callbackLeaveState}] = e.LeaveState
+		}
+		if e.EnterState != nil {
+			f.callbacks[cKey{ e.Dst, callbackEnterState}] = e.EnterState
+		}
+		if e.AfterEvent != nil {
+			f.callbacks[cKey{e.Label, callbackAfterEvent}] = e.AfterEvent
 		}
 
-		if callbackType != callbackNone {
-			f.callbacks[cKey{target, callbackType}] = fn
-		}
 	}
+
+	//// Map all callbacks to events/states.
+	//for name, fn := range callbacks {
+	//	var target string
+	//	callbackType := callbackNone
+	//
+	//	switch {
+	//	case strings.HasPrefix(name, "before_"):
+	//		target = strings.TrimPrefix(name, "before_")
+	//		if target == "event" {
+	//			f.BeforeEvent = fn
+	//		} else if _, ok := allEvents[target]; ok {
+	//			callbackType = callbackBeforeEvent
+	//		}
+	//	case strings.HasPrefix(name, "leave_"):
+	//		target = strings.TrimPrefix(name, "leave_")
+	//		if target == "state" {
+	//			f.LeaveState = fn
+	//		} else if _, ok := allStates[target]; ok {
+	//			callbackType = callbackLeaveState
+	//		}
+	//	case strings.HasPrefix(name, "enter_"):
+	//		target = strings.TrimPrefix(name, "enter_")
+	//		if target == "state" {
+	//			f.EnterState = fn
+	//		} else if _, ok := allStates[target]; ok {
+	//			callbackType = callbackEnterState
+	//		}
+	//	case strings.HasPrefix(name, "after_"):
+	//		target = strings.TrimPrefix(name, "after_")
+	//		if target == "event" {
+	//			f.AfterEvent = fn
+	//		} else if _, ok := allEvents[target]; ok {
+	//			callbackType = callbackAfterEvent
+	//		}
+	//	default:
+	//		target = name
+	//		if _, ok := allStates[target]; ok {
+	//			callbackType = callbackEnterState
+	//		} else if _, ok := allEvents[target]; ok {
+	//			callbackType = callbackAfterEvent
+	//		}
+	//	}
+	//
+	//	if callbackType != callbackNone {
+	//		f.callbacks[cKey{target, callbackType}] = fn
+	//	}
+	//}
 
 	return f
 }
@@ -280,10 +277,10 @@ func (f *EventTypeStateTypeFiniteStateMachine) Can(event EventType) bool {
 
 // AvailableTransitions returns a list of transitions available in the
 // current state.
-func (f *EventTypeStateTypeFiniteStateMachine) AvailableTransitions() States {
+func (f *EventTypeStateTypeFiniteStateMachine) AvailableTransitions() StateTypeStates {
 	f.stateMu.RLock()
 	defer f.stateMu.RUnlock()
-	var transitions States
+	var transitions StateTypeStates
 	for key := range f.transitions {
 		if key.src == f.current {
 			transitions = append(transitions, key.event)
@@ -340,6 +337,7 @@ func (f *EventTypeStateTypeFiniteStateMachine) Event(event EventType, args ...in
 	t.event = event
 	t.src = f.current
 	t.dst = dst
+	t.args = args
 
 	err := f.beforeEventCallbacks(t)
 	if err != nil {
@@ -491,7 +489,7 @@ type cKey struct {
 	// target is either the name of a state or an event depending on which
 	// callback type the key refers to. It can also be "" for a non-targeted
 	// callback like before_event.
-	target StateType
+	target interface{}
 
 	// callbackType is the situation when the callback will be run.
 	callbackType transitionType

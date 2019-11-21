@@ -16,7 +16,6 @@ package fsm
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 )
 
@@ -28,28 +27,24 @@ func (t fakeTransitionerObj) Transition(f *EventTypeStateTypeFiniteStateMachine)
 }
 
 func TestSameState(t *testing.T) {
-	start := new(StateType)
-	run := new(EventType)
-	fsm := NewFSM(
-		start,
-		Events{
-			{Label: run, Src: States{start}, Dst: start},
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"start",
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "start"},
 		},
-		Transitions{},
 	)
 	fsm.Event("run")
-	if fsm.Current() != start {
+	if fsm.Current() != "start" {
 		t.Error("expected state to be 'start'")
 	}
 }
 
 func TestState(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"walking",
-		Events{
-			{Label: "walk", Src: States{"start"}, Dst: "walking"},
+		EventTypeEvents{
+			{Label: "walk", Src: "start", Dst: "walking"},
 		},
-		Transitions{},
 	)
 	fsm.State("start")
 	if fsm.Current() != "start" {
@@ -62,12 +57,11 @@ func TestState(t *testing.T) {
 }
 
 func TestBadTransition(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "running"},
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "running"},
 		},
-		Transitions{},
 	)
 	fsm.transitionerObj = new(fakeTransitionerObj)
 	err := fsm.Event("run")
@@ -77,13 +71,12 @@ func TestBadTransition(t *testing.T) {
 }
 
 func TestInappropriateEvent(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
 		},
-		Transitions{},
 	)
 	err := fsm.Event("close")
 	if e, ok := err.(InvalidEventError); !ok && e.Event != "close" && e.State != "closed" {
@@ -92,13 +85,12 @@ func TestInappropriateEvent(t *testing.T) {
 }
 
 func TestInvalidEvent(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
 		},
-		Transitions{},
 	)
 	err := fsm.Event("lock")
 	if e, ok := err.(UnknownEventError); !ok && e.Event != "close" {
@@ -107,14 +99,15 @@ func TestInvalidEvent(t *testing.T) {
 }
 
 func TestMultipleSources(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"one",
-		Events{
-			{Label: "first", Src: States{"one"}, Dst: "two"},
-			{Label: "second", Src: States{"two"}, Dst: "three"},
-			{Label: "reset", Src: States{"one", "two", "three"}, Dst: "one"},
+		EventTypeEvents{
+			{Label: "first", Src: "one", Dst: "two"},
+			{Label: "second", Src: "two", Dst: "three"},
+			{Label: "reset", Src: "one", Dst: "one"},
+			{Label: "reset", Src: "two", Dst: "one"},
+			{Label: "reset", Src: "three", Dst: "one"},
 		},
-		Transitions{},
 	)
 
 	fsm.Event("first")
@@ -137,16 +130,16 @@ func TestMultipleSources(t *testing.T) {
 }
 
 func TestMultipleEvents(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "first", Src: States{"start"}, Dst: "one"},
-			{Label: "second", Src: States{"start"}, Dst: "two"},
-			{Label: "reset", Src: States{"one"}, Dst: "reset_one"},
-			{Label: "reset", Src: States{"two"}, Dst: "reset_two"},
-			{Label: "reset", Src: States{"reset_one", "reset_two"}, Dst: "start"},
+		EventTypeEvents{
+			{Label: "first", Src: "start", Dst: "one"},
+			{Label: "second", Src: "start", Dst: "two"},
+			{Label: "reset", Src: "one", Dst: "reset_one"},
+			{Label: "reset", Src: "two", Dst: "reset_two"},
+			{Label: "reset", Src: "reset_one", Dst: "start"},
+			{Label: "reset", Src: "reset_two", Dst: "start"},
 		},
-		Transitions{},
 	)
 
 	fsm.Event("first")
@@ -176,30 +169,32 @@ func TestGenericCallbacks(t *testing.T) {
 	enterState := false
 	afterEvent := false
 
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"before_event": func(t Transition) error {
-				beforeEvent = true
-				return nil
-			},
-			"leave_state": func(t Transition) error {
-				leaveState = true
-				return nil
-			},
-			"enter_state": func(t Transition) error {
-				enterState = true
-				return nil
-			},
-			"after_event": func(t Transition) error {
-				afterEvent = true
-				return nil
+		EventTypeEvents{
+			{
+				Label: "run",
+				Src:   "start",
+				Dst:   "end",
 			},
 		},
 	)
+	fsm.BeforeEvent = func(t Transition) error {
+		beforeEvent = true
+		return nil
+	}
+	fsm.LeaveState = func(t Transition) error {
+		leaveState = true
+		return nil
+	}
+	fsm.EnterState = func(t Transition) error {
+		enterState = true
+		return nil
+	}
+	fsm.AfterEvent = func(t Transition) error {
+		afterEvent = true
+		return nil
+	}
 
 	fsm.Event("run")
 	if !(beforeEvent && leaveState && enterState && afterEvent) {
@@ -213,27 +208,29 @@ func TestSpecificCallbacks(t *testing.T) {
 	enterState := false
 	afterEvent := false
 
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"before_run": func(t Transition) error {
-				beforeEvent = true
-				return nil
-			},
-			"leave_start": func(t Transition) error {
-				leaveState = true
-				return nil
-			},
-			"enter_end": func(t Transition) error {
-				enterState = true
-				return nil
-			},
-			"after_run": func(t Transition) error {
-				afterEvent = true
-				return nil
+		EventTypeEvents{
+			{
+				Label: "run",
+				Src: "start",
+				Dst: "end",
+				BeforeEvent:func(t Transition) error {
+					beforeEvent = true
+					return nil
+				},
+				LeaveState: func(t Transition) error {
+					leaveState = true
+					return nil
+				},
+				EnterState: func(t Transition) error {
+					enterState = true
+					return nil
+				},
+				AfterEvent:func(t Transition) error {
+					afterEvent = true
+					return nil
+				},
 			},
 		},
 	)
@@ -244,46 +241,43 @@ func TestSpecificCallbacks(t *testing.T) {
 	}
 }
 
-func TestSpecificCallbacksShortform(t *testing.T) {
-	enterState := false
-	afterEvent := false
-
-	fsm := NewFSM(
-		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"end": func(t Transition) error {
-				enterState = true
-				return nil
-			},
-			"run": func(t Transition) error {
-				afterEvent = true
-				return nil
-			},
-		},
-	)
-
-	fsm.Event("run")
-	if !(enterState && afterEvent) {
-		t.Error("expected all callbacks to be called")
-	}
-}
+//func TestSpecificCallbacksShortform(t *testing.T) {
+//	enterState := false
+//	afterEvent := false
+//
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"start",
+//		EventTypeEvents{
+//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
+//		},
+//		Transitions{
+//			"end": func(t Transition) error {
+//				enterState = true
+//				return nil
+//			},
+//			"run": func(t Transition) error {
+//				afterEvent = true
+//				return nil
+//			},
+//		},
+//	)
+//
+//	fsm.Event("run")
+//	if !(enterState && afterEvent) {
+//		t.Error("expected all callbacks to be called")
+//	}
+//}
 
 func TestBeforeEventWithoutTransition(t *testing.T) {
 	beforeEvent := true
 
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "dontrun", Src: States{"start"}, Dst: "start"},
-		},
-		Transitions{
-			"before_event": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "dontrun", Src: "start", Dst: "start", BeforeEvent: func(t Transition) error {
 				beforeEvent = true
 				return nil
-			},
+			}},
 		},
 	)
 
@@ -301,18 +295,16 @@ func TestBeforeEventWithoutTransition(t *testing.T) {
 }
 
 func TestCancelBeforeGenericEvent(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"before_event": func(t Transition) error {
-				t.Cancel()
-				return nil
-			},
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end"},
 		},
 	)
+	fsm.BeforeEvent = func(t Transition) error {
+		t.Cancel()
+		return nil
+	}
 	fsm.Event("run")
 	if fsm.Current() != "start" {
 		t.Error("expected state to be 'start'")
@@ -320,16 +312,13 @@ func TestCancelBeforeGenericEvent(t *testing.T) {
 }
 
 func TestCancelBeforeSpecificEvent(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"before_run": func(t Transition) error {
+		EventTypeEvents{
+			{ Label: "run", Src: "start", Dst: "end", BeforeEvent: func(t Transition) error {
 				t.Cancel()
 				return nil
-			},
+			}},
 		},
 	)
 	fsm.Event("run")
@@ -339,16 +328,13 @@ func TestCancelBeforeSpecificEvent(t *testing.T) {
 }
 
 func TestCancelLeaveGenericState(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"leave_state": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", LeaveState: func(t Transition) error {
 				t.Cancel()
 				return nil
-			},
+			}},
 		},
 	)
 	fsm.Event("run")
@@ -357,37 +343,34 @@ func TestCancelLeaveGenericState(t *testing.T) {
 	}
 }
 
-func TestCancelLeaveSpecificState(t *testing.T) {
-	fsm := NewFSM(
-		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"leave_start": func(t Transition) error {
-				t.Cancel()
-				return nil
-			},
-		},
-	)
-	fsm.Event("run")
-	if fsm.Current() != "start" {
-		t.Error("expected state to be 'start'")
-	}
-}
+//func TestCancelLeaveSpecificState(t *testing.T) {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"start",
+//		EventTypeEvents{
+//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
+//		},
+//		Transitions{
+//			"leave_start": func(t Transition) error {
+//				t.Cancel()
+//				return nil
+//			},
+//		},
+//	)
+//	fsm.Event("run")
+//	if fsm.Current() != "start" {
+//		t.Error("expected state to be 'start'")
+//	}
+//}
 
 func TestCancelWithError(t *testing.T) {
 	expect := fmt.Errorf("error")
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"before_event": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", BeforeEvent:  func(t Transition) error {
 				t.Cancel()
 				return expect
-			},
+			}},
 		},
 	)
 	err := fsm.Event("run")
@@ -401,18 +384,16 @@ func TestCancelWithError(t *testing.T) {
 }
 
 func TestAsyncTransitionGenericState(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"leave_state": func(t Transition) error {
-				t.SetAsync()
-				return nil
-			},
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", },
 		},
 	)
+	fsm.LeaveState = func(t Transition) error {
+		t.SetAsync()
+		return nil
+	}
 	fsm.Event("run")
 	if fsm.Current() != "start" {
 		t.Error("expected state to be 'start'")
@@ -424,16 +405,13 @@ func TestAsyncTransitionGenericState(t *testing.T) {
 }
 
 func TestAsyncTransitionSpecificState(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"leave_start": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", LeaveState: func(t Transition) error {
 				t.SetAsync()
 				return nil
-			},
+			}},
 		},
 	)
 	fsm.Event("run")
@@ -447,17 +425,14 @@ func TestAsyncTransitionSpecificState(t *testing.T) {
 }
 
 func TestAsyncTransitionInProgress(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-			{Label: "reset", Src: States{"end"}, Dst: "start"},
-		},
-		Transitions{
-			"leave_start": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", LeaveState: func(t Transition) error {
 				t.SetAsync()
 				return nil
-			},
+			}},
+			{Label: "reset", Src: "end", Dst: "start"},
 		},
 	)
 	fsm.Event("run")
@@ -473,13 +448,12 @@ func TestAsyncTransitionInProgress(t *testing.T) {
 }
 
 func TestAsyncTransitionNotInProgress(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-			{Label: "reset", Src: States{"end"}, Dst: "start"},
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end"},
+			{Label: "reset", Src: "end", Dst: "start"},
 		},
-		Transitions{},
 	)
 	err := fsm.Transition()
 	if _, ok := err.(NotInTransitionError); !ok {
@@ -488,15 +462,12 @@ func TestAsyncTransitionNotInProgress(t *testing.T) {
 }
 
 func TestCallbackNoError(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"run": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", AfterEvent: func(t Transition) error {
 				return nil
-			},
+			}},
 		},
 	)
 	e := fsm.Event("run")
@@ -506,15 +477,12 @@ func TestCallbackNoError(t *testing.T) {
 }
 
 func TestCallbackError(t *testing.T) {
-	fsm := NewFSM(
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"run": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", AfterEvent: func(t Transition) error {
 				return fmt.Errorf("error")
-			},
+			}},
 		},
 	)
 	e := fsm.Event("run")
@@ -523,77 +491,73 @@ func TestCallbackError(t *testing.T) {
 	}
 }
 
-//func TestCallbackArgs(t *testing.T) {
-//	fsm := NewFSM(
-//		"start",
-//		Events{
-//			{Label: "run", Src: States{"start"}, Dst: "end"},
-//		},
-//		Transitions{
-//			"run": func(t Transition) {
-//				if len(e.Args) != 1 {
-//					t.Error("too few arguments")
-//				}
-//				arg, ok := e.Args[0].(string)
-//				if !ok {
-//					t.Error("not a string argument")
-//				}
-//				if arg != "test" {
-//					t.Error("incorrect argument")
-//				}
-//			},
-//		},
-//	)
-//	fsm.Event("run", "test")
-//}
+func TestCallbackArgs(t *testing.T) {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"start",
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", AfterEvent: func(tr Transition) error {
+				args := tr.Args()
+				if len(args) != 1 {
+					t.Error("too few arguments")
+				}
+				arg, ok := args[0].(string)
+				if !ok {
+					t.Error("not a string argument")
+				}
+				if arg != "test" {
+					t.Error("incorrect argument")
+				}
+				return nil
+			}},
+		},
+	)
+	fsm.Event("run", "test")
+}
 
 func TestNoDeadLock(t *testing.T) {
 	var fsm *EventTypeStateTypeFiniteStateMachine
-	fsm = NewFSM(
+	fsm = NewEventTypeStateTypeFiniteStateMachine(
 		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"run": func(t Transition) error {
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", AfterEvent: func(t Transition) error {
 				fsm.Current() // Should not result in a panic / deadlock
 				return nil
-			},
+			}},
 		},
 	)
 	fsm.Event("run")
 }
 
-func TestThreadSafetyRaceCondition(t *testing.T) {
-	fsm := NewFSM(
-		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "end"},
-		},
-		Transitions{
-			"run": func(t Transition) error {
-				return nil
-			},
-		},
-	)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = fsm.Current()
-	}()
-	fsm.Event("run")
-	wg.Wait()
-}
+//func TestThreadSafetyRaceCondition(t *testing.T) {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"start",
+//		EventTypeEvents{
+//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
+//		},
+//		Transitions{
+//			"run": func(t Transition) error {
+//				return nil
+//			},
+//		},
+//	)
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		_ = fsm.Current()
+//	}()
+//	fsm.Event("run")
+//	wg.Wait()
+//}
 
 //func TestDoubleTransition(t *testing.T) {
 //	var fsm *EventTypeStateTypeFiniteStateMachine
 //	var wg sync.WaitGroup
 //	wg.Add(2)
-//	fsm = NewFSM(
+//	fsm = NewEventTypeStateTypeFiniteStateMachine(
 //		"start",
-//		Events{
-//			{Label: "run", Src: States{"start"}, Dst: "end"},
+//		EventTypeEvents{
+//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
 //		},
 //		Transitions{
 //			"before_run": func(t Transition) error {
@@ -625,136 +589,136 @@ func TestThreadSafetyRaceCondition(t *testing.T) {
 //	wg.Wait()
 //}
 
-func TestNoTransition(t *testing.T) {
-	fsm := NewFSM(
-		"start",
-		Events{
-			{Label: "run", Src: States{"start"}, Dst: "start"},
-		},
-		Transitions{},
-	)
-	err := fsm.Event("run")
-	if _, ok := err.(NoTransitionError); !ok {
-		t.Error("expected 'NoTransitionError'")
-	}
-}
+//func TestNoTransition(t *testing.T) {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"start",
+//		EventTypeEvents{
+//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "start"},
+//		},
+//		Transitions{},
+//	)
+//	err := fsm.Event("run")
+//	if _, ok := err.(NoTransitionError); !ok {
+//		t.Error("expected 'NoTransitionError'")
+//	}
+//}
 
-func ExampleNewFSM() {
-	fsm := NewFSM(
-		"green",
-		Events{
-			{Label: "warn", Src: States{"green"}, Dst: "yellow"},
-			{Label: "panic", Src: States{"yellow"}, Dst: "red"},
-			{Label: "panic", Src: States{"green"}, Dst: "red"},
-			{Label: "calm", Src: States{"red"}, Dst: "yellow"},
-			{Label: "clear", Src: States{"yellow"}, Dst: "green"},
-		},
-		Transitions{
-			"before_warn": func(t Transition) error {
-				fmt.Println("before_warn")
-				return nil
-			},
-			"before_event": func(t Transition) error {
-				fmt.Println("before_event")
-				return nil
-			},
-			"leave_green": func(t Transition) error {
-				fmt.Println("leave_green")
-				return nil
-			},
-			"leave_state": func(t Transition) error {
-				fmt.Println("leave_state")
-				return nil
-			},
-			"enter_yellow": func(t Transition) error {
-				fmt.Println("enter_yellow")
-				return nil
-			},
-			"enter_state": func(t Transition) error {
-				fmt.Println("enter_state")
-				return nil
-			},
-			"after_warn": func(t Transition) error {
-				fmt.Println("after_warn")
-				return nil
-			},
-			"after_event": func(t Transition) error {
-				fmt.Println("after_event")
-				return nil
-			},
-		},
-	)
-	fmt.Println(fsm.Current())
-	err := fsm.Event("warn")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(fsm.Current())
-	// Output:
-	// green
-	// before_warn
-	// before_event
-	// leave_green
-	// leave_state
-	// enter_yellow
-	// enter_state
-	// after_warn
-	// after_event
-	// yellow
-}
+//func ExampleNewFSM() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"green",
+//		EventTypeEvents{
+//			{Label: "warn", Src: StateTypeStates{"green"}, Dst: "yellow"},
+//			{Label: "panic", Src: StateTypeStates{"yellow"}, Dst: "red"},
+//			{Label: "panic", Src: StateTypeStates{"green"}, Dst: "red"},
+//			{Label: "calm", Src: StateTypeStates{"red"}, Dst: "yellow"},
+//			{Label: "clear", Src: StateTypeStates{"yellow"}, Dst: "green"},
+//		},
+//		Transitions{
+//			"before_warn": func(t Transition) error {
+//				fmt.Println("before_warn")
+//				return nil
+//			},
+//			"before_event": func(t Transition) error {
+//				fmt.Println("before_event")
+//				return nil
+//			},
+//			"leave_green": func(t Transition) error {
+//				fmt.Println("leave_green")
+//				return nil
+//			},
+//			"leave_state": func(t Transition) error {
+//				fmt.Println("leave_state")
+//				return nil
+//			},
+//			"enter_yellow": func(t Transition) error {
+//				fmt.Println("enter_yellow")
+//				return nil
+//			},
+//			"enter_state": func(t Transition) error {
+//				fmt.Println("enter_state")
+//				return nil
+//			},
+//			"after_warn": func(t Transition) error {
+//				fmt.Println("after_warn")
+//				return nil
+//			},
+//			"after_event": func(t Transition) error {
+//				fmt.Println("after_event")
+//				return nil
+//			},
+//		},
+//	)
+//	fmt.Println(fsm.Current())
+//	err := fsm.Event("warn")
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//	fmt.Println(fsm.Current())
+//	// Output:
+//	// green
+//	// before_warn
+//	// before_event
+//	// leave_green
+//	// leave_state
+//	// enter_yellow
+//	// enter_state
+//	// after_warn
+//	// after_event
+//	// yellow
+//}
 
-func ExampleFSM_Current() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{},
-	)
-	fmt.Println(fsm.Current())
-	// Output: closed
-}
+//func ExampleFSM_Current() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{},
+//	)
+//	fmt.Println(fsm.Current())
+//	// Output: closed
+//}
 
-func ExampleFSM_Is() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{},
-	)
-	fmt.Println(fsm.Is("closed"))
-	fmt.Println(fsm.Is("open"))
-	// Output:
-	// true
-	// false
-}
+//func ExampleFSM_Is() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{},
+//	)
+//	fmt.Println(fsm.Is("closed"))
+//	fmt.Println(fsm.Is("open"))
+//	// Output:
+//	// true
+//	// false
+//}
 
-func ExampleFSM_Can() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{},
-	)
-	fmt.Println(fsm.Can("open"))
-	fmt.Println(fsm.Can("close"))
-	// Output:
-	// true
-	// false
-}
+//func ExampleFSM_Can() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{},
+//	)
+//	fmt.Println(fsm.Can("open"))
+//	fmt.Println(fsm.Can("close"))
+//	// Output:
+//	// true
+//	// false
+//}
 
 //func ExampleFSM_AvailableTransitions() {
-//	fsm := NewFSM(
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
 //		"closed",
-//		Events{
-//			{Label: "open", Src: States{"closed"}, Dst: "open"},
-//			{Label: "close", Src: States{"open"}, Dst: "closed"},
-//			{Label: "kick", Src: States{"closed"}, Dst: "broken"},
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//			{Label: "kick", Src: StateTypeStates{"closed"}, Dst: "broken"},
 //		},
 //		Transitions{},
 //	)
@@ -766,73 +730,73 @@ func ExampleFSM_Can() {
 //	// [kick open]
 //}
 
-func ExampleFSM_Cannot() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{},
-	)
-	fmt.Println(fsm.Cannot("open"))
-	fmt.Println(fsm.Cannot("close"))
-	// Output:
-	// false
-	// true
-}
+//func ExampleFSM_Cannot() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{},
+//	)
+//	fmt.Println(fsm.Cannot("open"))
+//	fmt.Println(fsm.Cannot("close"))
+//	// Output:
+//	// false
+//	// true
+//}
 
-func ExampleFSM_Event() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{},
-	)
-	fmt.Println(fsm.Current())
-	err := fsm.Event("open")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(fsm.Current())
-	err = fsm.Event("close")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(fsm.Current())
-	// Output:
-	// closed
-	// open
-	// closed
-}
+//func ExampleFSM_Event() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{},
+//	)
+//	fmt.Println(fsm.Current())
+//	err := fsm.Event("open")
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//	fmt.Println(fsm.Current())
+//	err = fsm.Event("close")
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//	fmt.Println(fsm.Current())
+//	// Output:
+//	// closed
+//	// open
+//	// closed
+//}
 
-func ExampleFSM_Transition() {
-	fsm := NewFSM(
-		"closed",
-		Events{
-			{Label: "open", Src: States{"closed"}, Dst: "open"},
-			{Label: "close", Src: States{"open"}, Dst: "closed"},
-		},
-		Transitions{
-			"leave_closed": func(t Transition) error {
-				t.SetAsync()
-				return nil
-			},
-		},
-	)
-	err := fsm.Event("open")
-	if e, ok := err.(AsyncError); !ok && e.Err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(fsm.Current())
-	err = fsm.Transition()
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(fsm.Current())
-	// Output:
-	// closed
-	// open
-}
+//func ExampleFSM_Transition() {
+//	fsm := NewEventTypeStateTypeFiniteStateMachine(
+//		"closed",
+//		EventTypeEvents{
+//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
+//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
+//		},
+//		Transitions{
+//			"leave_closed": func(t Transition) error {
+//				t.SetAsync()
+//				return nil
+//			},
+//		},
+//	)
+//	err := fsm.Event("open")
+//	if e, ok := err.(AsyncError); !ok && e.Err != nil {
+//		fmt.Println(err)
+//	}
+//	fmt.Println(fsm.Current())
+//	err = fsm.Transition()
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//	fmt.Println(fsm.Current())
+//	// Output:
+//	// closed
+//	// open
+//}
