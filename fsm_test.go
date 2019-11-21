@@ -16,7 +16,9 @@ package fsm
 
 import (
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 )
 
 type fakeTransitionerObj struct {
@@ -528,199 +530,194 @@ func TestNoDeadLock(t *testing.T) {
 	fsm.Event("run")
 }
 
-//func TestThreadSafetyRaceCondition(t *testing.T) {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"start",
-//		EventTypeEvents{
-//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
-//		},
-//		Transitions{
-//			"run": func(t Transition) error {
-//				return nil
-//			},
-//		},
-//	)
-//	var wg sync.WaitGroup
-//	wg.Add(1)
-//	go func() {
-//		defer wg.Done()
-//		_ = fsm.Current()
-//	}()
-//	fsm.Event("run")
-//	wg.Wait()
-//}
+func TestThreadSafetyRaceCondition(t *testing.T) {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"start",
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", AfterEvent: func(t Transition) error {
+				return nil
+			}},
+		},
+	)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = fsm.Current()
+	}()
+	fsm.Event("run")
+	wg.Wait()
+}
 
-//func TestDoubleTransition(t *testing.T) {
-//	var fsm *EventTypeStateTypeFiniteStateMachine
-//	var wg sync.WaitGroup
-//	wg.Add(2)
-//	fsm = NewEventTypeStateTypeFiniteStateMachine(
-//		"start",
-//		EventTypeEvents{
-//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "end"},
-//		},
-//		Transitions{
-//			"before_run": func(t Transition) error {
-//				wg.Done()
-//				// Imagine a concurrent event coming in of the same type while
-//				// the data access mutex is unlocked because the current transition
-//				// is running its event callbacks, getting around the "active"
-//				// transition checks
-//				if len(e.Args) == 0 {
-//					// Must be concurrent so the test may pass when we add a mutex that synchronizes
-//					// calls to Transition(...). It will then fail as an inappropriate transition as we
-//					// have changed state.
-//					go func() {
-//						if err := fsm.Event("run", "second run"); err != nil {
-//							fmt.Println(err)
-//							wg.Done() // It should fail, and then we unfreeze the test.
-//						}
-//					}()
-//					time.Sleep(20 * time.Millisecond)
-//				} else {
-//					panic("Was able to reissue an event mid-transition")
-//				}
-//			},
-//		},
-//	)
-//	if err := fsm.Event("run"); err != nil {
-//		fmt.Println(err)
-//	}
-//	wg.Wait()
-//}
+func TestDoubleTransition(t *testing.T) {
+	var fsm *EventTypeStateTypeFiniteStateMachine
+	var wg sync.WaitGroup
+	wg.Add(2)
+	fsm = NewEventTypeStateTypeFiniteStateMachine(
+		"start",
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "end", BeforeEvent: func(tr Transition) error {
+				wg.Done()
+				// Imagine a concurrent event coming in of the same type while
+				// the data access mutex is unlocked because the current transition
+				// is running its event callbacks, getting around the "active"
+				// transition checks
+				if len(tr.Args()) == 0 {
+					// Must be concurrent so the test may pass when we add a mutex that synchronizes
+					// calls to Transition(...). It will then fail as an inappropriate transition as we
+					// have changed state.
+					go func() {
+						if err := fsm.Event("run", "second run"); err != nil {
+							fmt.Println(err)
+							wg.Done() // It should fail, and then we unfreeze the test.
+						}
+					}()
+					time.Sleep(20 * time.Millisecond)
+				} else {
+					panic("Was able to reissue an event mid-transition")
+				}
+				return nil
+			}},
+		},
+	)
+	if err := fsm.Event("run"); err != nil {
+		fmt.Println(err)
+	}
+	wg.Wait()
+}
 
-//func TestNoTransition(t *testing.T) {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"start",
-//		EventTypeEvents{
-//			{Label: "run", Src: StateTypeStates{"start"}, Dst: "start"},
-//		},
-//		Transitions{},
-//	)
-//	err := fsm.Event("run")
-//	if _, ok := err.(NoTransitionError); !ok {
-//		t.Error("expected 'NoTransitionError'")
-//	}
-//}
+func TestNoTransition(t *testing.T) {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"start",
+		EventTypeEvents{
+			{Label: "run", Src: "start", Dst: "start"},
+		},
+	)
+	err := fsm.Event("run")
+	if _, ok := err.(NoTransitionError); !ok {
+		t.Error("expected 'NoTransitionError'")
+	}
+}
 
-//func ExampleNewFSM() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"green",
-//		EventTypeEvents{
-//			{Label: "warn", Src: StateTypeStates{"green"}, Dst: "yellow"},
-//			{Label: "panic", Src: StateTypeStates{"yellow"}, Dst: "red"},
-//			{Label: "panic", Src: StateTypeStates{"green"}, Dst: "red"},
-//			{Label: "calm", Src: StateTypeStates{"red"}, Dst: "yellow"},
-//			{Label: "clear", Src: StateTypeStates{"yellow"}, Dst: "green"},
-//		},
-//		Transitions{
-//			"before_warn": func(t Transition) error {
-//				fmt.Println("before_warn")
-//				return nil
-//			},
-//			"before_event": func(t Transition) error {
-//				fmt.Println("before_event")
-//				return nil
-//			},
-//			"leave_green": func(t Transition) error {
-//				fmt.Println("leave_green")
-//				return nil
-//			},
-//			"leave_state": func(t Transition) error {
-//				fmt.Println("leave_state")
-//				return nil
-//			},
-//			"enter_yellow": func(t Transition) error {
-//				fmt.Println("enter_yellow")
-//				return nil
-//			},
-//			"enter_state": func(t Transition) error {
-//				fmt.Println("enter_state")
-//				return nil
-//			},
-//			"after_warn": func(t Transition) error {
-//				fmt.Println("after_warn")
-//				return nil
-//			},
-//			"after_event": func(t Transition) error {
-//				fmt.Println("after_event")
-//				return nil
-//			},
-//		},
-//	)
-//	fmt.Println(fsm.Current())
-//	err := fsm.Event("warn")
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//	fmt.Println(fsm.Current())
-//	// Output:
-//	// green
-//	// before_warn
-//	// before_event
-//	// leave_green
-//	// leave_state
-//	// enter_yellow
-//	// enter_state
-//	// after_warn
-//	// after_event
-//	// yellow
-//}
+func ExampleNewFSM() {
+	beforeEvent := func(t Transition) error {
+		fmt.Println("before_event")
+		return nil
+	}
+	beforeWarn := func(t Transition) error {
+		fmt.Println("before_warn")
+		return nil
+	}
+	leaveGreen := func(t Transition) error {
+		fmt.Println("leave_green")
+		return nil
+	}
+	leaveState := func(t Transition) error {
+		fmt.Println("leave_state")
+		return nil
+	}
+	enterYellow := func(t Transition) error {
+		fmt.Println("enter_yellow")
+		return nil
+	}
+	enterState := func(t Transition) error {
+		fmt.Println("enter_state")
+		return nil
+	}
+	afterWarn := func(t Transition) error {
+		fmt.Println("after_warn")
+		return nil
+	}
+	afterEvent := func(t Transition) error {
+		fmt.Println("after_event")
+		return nil
+	}
 
-//func ExampleFSM_Current() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{},
-//	)
-//	fmt.Println(fsm.Current())
-//	// Output: closed
-//}
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"green",
+		EventTypeEvents{
+			{Label: "warn", Src: "green", Dst: "yellow", BeforeEvent: beforeWarn, LeaveState: leaveGreen, AfterEvent: afterWarn, EnterState: enterYellow},
+			{Label: "panic", Src: "yellow", Dst: "red"},
+			{Label: "panic", Src: "green", Dst: "red", LeaveState: leaveGreen},
+			{Label: "calm", Src: "red", Dst: "yellow", EnterState: enterYellow},
+			{Label: "clear", Src: "yellow", Dst: "green", EnterState: enterYellow },
+		},
+	)
 
-//func ExampleFSM_Is() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{},
-//	)
-//	fmt.Println(fsm.Is("closed"))
-//	fmt.Println(fsm.Is("open"))
-//	// Output:
-//	// true
-//	// false
-//}
+	fsm.BeforeEvent = beforeEvent
+	fsm.LeaveState = leaveState
+	fsm.EnterState = enterState
+	fsm.AfterEvent = afterEvent
 
-//func ExampleFSM_Can() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{},
-//	)
-//	fmt.Println(fsm.Can("open"))
-//	fmt.Println(fsm.Can("close"))
-//	// Output:
-//	// true
-//	// false
-//}
+	fmt.Println(fsm.Current())
+	err := fsm.Event("warn")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fsm.Current())
+	// Output:
+	// green
+	// before_warn
+	// before_event
+	// leave_green
+	// leave_state
+	// enter_yellow
+	// enter_state
+	// after_warn
+	// after_event
+	// yellow
+}
+
+func ExampleFSM_Current() {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	fmt.Println(fsm.Current())
+	// Output: closed
+}
+
+func ExampleFSM_Is() {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	fmt.Println(fsm.Is("closed"))
+	fmt.Println(fsm.Is("open"))
+	// Output:
+	// true
+	// false
+}
+
+func ExampleFSM_Can() {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	fmt.Println(fsm.Can("open"))
+	fmt.Println(fsm.Can("close"))
+	// Output:
+	// true
+	// false
+}
 
 //func ExampleFSM_AvailableTransitions() {
 //	fsm := NewEventTypeStateTypeFiniteStateMachine(
 //		"closed",
 //		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//			{Label: "kick", Src: StateTypeStates{"closed"}, Dst: "broken"},
+//			{Label: "open", Src: "closed", Dst: "open"},
+//			{Label: "close", Src: "open", Dst: "closed"},
+//			{Label: "kick", Src: "closed", Dst: "broken"},
 //		},
-//		Transitions{},
 //	)
 //	// sort the results ordering is consistent for the output checker
 //	transitions := fsm.AvailableTransitions()
@@ -730,73 +727,69 @@ func TestNoDeadLock(t *testing.T) {
 //	// [kick open]
 //}
 
-//func ExampleFSM_Cannot() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{},
-//	)
-//	fmt.Println(fsm.Cannot("open"))
-//	fmt.Println(fsm.Cannot("close"))
-//	// Output:
-//	// false
-//	// true
-//}
+func ExampleFSM_Cannot() {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	fmt.Println(fsm.Cannot("open"))
+	fmt.Println(fsm.Cannot("close"))
+	// Output:
+	// false
+	// true
+}
 
-//func ExampleFSM_Event() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{},
-//	)
-//	fmt.Println(fsm.Current())
-//	err := fsm.Event("open")
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//	fmt.Println(fsm.Current())
-//	err = fsm.Event("close")
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//	fmt.Println(fsm.Current())
-//	// Output:
-//	// closed
-//	// open
-//	// closed
-//}
+func ExampleFSM_Event() {
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	fmt.Println(fsm.Current())
+	err := fsm.Event("open")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fsm.Current())
+	err = fsm.Event("close")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fsm.Current())
+	// Output:
+	// closed
+	// open
+	// closed
+}
 
-//func ExampleFSM_Transition() {
-//	fsm := NewEventTypeStateTypeFiniteStateMachine(
-//		"closed",
-//		EventTypeEvents{
-//			{Label: "open", Src: StateTypeStates{"closed"}, Dst: "open"},
-//			{Label: "close", Src: StateTypeStates{"open"}, Dst: "closed"},
-//		},
-//		Transitions{
-//			"leave_closed": func(t Transition) error {
-//				t.SetAsync()
-//				return nil
-//			},
-//		},
-//	)
-//	err := fsm.Event("open")
-//	if e, ok := err.(AsyncError); !ok && e.Err != nil {
-//		fmt.Println(err)
-//	}
-//	fmt.Println(fsm.Current())
-//	err = fsm.Transition()
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//	fmt.Println(fsm.Current())
-//	// Output:
-//	// closed
-//	// open
-//}
+func ExampleFSM_Transition() {
+	leaveClosed := func(t Transition) error {
+		t.SetAsync()
+		return nil
+	}
+	fsm := NewEventTypeStateTypeFiniteStateMachine(
+		"closed",
+		EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open", LeaveState: leaveClosed},
+			{Label: "close", Src: "open", Dst: "closed"},
+		},
+	)
+	err := fsm.Event("open")
+	if e, ok := err.(AsyncError); !ok && e.Err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fsm.Current())
+	err = fsm.Transition()
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(fsm.Current())
+	// Output:
+	// closed
+	// open
+}
