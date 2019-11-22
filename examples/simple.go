@@ -8,13 +8,12 @@ import (
 )
 
 func main() {
-	fsm := fsm.NewFSM(
+	fsm := fsm.NewEventTypeStateTypeFiniteStateMachine(
 		"closed",
-		fsm.Events{
-			{Label: "open", Src: fsm.States{"closed"}, Dst: "open"},
-			{Label: "close", Src: fsm.States{"open"}, Dst: "closed"},
+		fsm.EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
 		},
-		fsm.Transitions{},
 	)
 
 	fmt.Println(fsm.Current())

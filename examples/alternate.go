@@ -8,32 +8,31 @@ import (
 )
 
 func main() {
-	fsm := fsm.NewFSM(
+	scan := func(t fsm.Transition) error {
+		// fmt.Println("after_scan: " + t.Current())
+		return nil
+	}
+	working := func(t fsm.Transition) error {
+		//fmt.Println("working: " + t.Current())
+		return nil
+	}
+	situation := func(t fsm.Transition) error {
+		//fmt.Println("situation: " + t.Current())
+		return nil
+	}
+	finish := func(t fsm.Transition) error {
+		//fmt.Println("finish: " + t.Current())
+		return nil
+	}
+
+	fsm := fsm.NewEventTypeStateTypeFiniteStateMachine(
 		"idle",
-		fsm.Events{
-			{Label: "scan", Src: fsm.States{"idle"}, Dst: "scanning"},
-			{Label: "working", Src: fsm.States{"scanning"}, Dst: "scanning"},
-			{Label: "situation", Src: fsm.States{"scanning"}, Dst: "scanning"},
-			{Label: "situation", Src: fsm.States{"idle"}, Dst: "idle"},
-			{Label: "finish", Src: fsm.States{"scanning"}, Dst: "idle"},
-		},
-		fsm.Transitions{
-			"scan": func(t fsm.Transition) error {
-				//fmt.Println("after_scan: " + t.Current())
-				return nil
-			},
-			"working": func(t fsm.Transition) error {
-				//fmt.Println("working: " + t.Current())
-				return nil
-			},
-			"situation": func(t fsm.Transition) error {
-				//fmt.Println("situation: " + t.Current())
-				return nil
-			},
-			"finish": func(t fsm.Transition) error {
-				//fmt.Println("finish: " + t.Current())
-				return nil
-			},
+		fsm.EventTypeEvents{
+			{Label: "scan", Src: "idle", Dst: "scanning", AfterEvent: scan},
+			{Label: "working", Src: "scanning", Dst: "scanning", AfterEvent:working},
+			{Label: "situation", Src: "scanning", Dst: "scanning", AfterEvent: situation},
+			{Label: "situation", Src: "idle", Dst: "idle", AfterEvent: situation},
+			{Label: "finish", Src: "scanning", Dst: "idle", AfterEvent: finish},
 		},
 	)
 
@@ -65,6 +64,6 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Printf("4:%s\n",fsm.Current())
+	fmt.Printf("4:%s\n", fsm.Current())
 
 }

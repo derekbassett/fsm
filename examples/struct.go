@@ -16,20 +16,18 @@ func NewDoor(to string) *Door {
 	d := &Door{
 		To: to,
 	}
-
-	d.FSM = fsm.NewFSM(
+	enterState := func(t fsm.Transition) error {
+		d.enterState(t)
+		return nil
+	}
+	d.FSM = fsm.NewEventTypeStateTypeFiniteStateMachine(
 		"closed",
-		fsm.Events{
-			{Label: "open", Src: fsm.States{"closed"}, Dst: "open"},
-			{Label: "close", Src: fsm.States{"open"}, Dst: "closed"},
-		},
-		fsm.Transitions{
-			"enter_state": func(t fsm.Transition) error {
-				d.enterState(t)
-				return nil
-			},
+		fsm.EventTypeEvents{
+			{Label: "open", Src: "closed", Dst: "open"},
+			{Label: "close", Src: "open", Dst: "closed"},
 		},
 	)
+	d.FSM.EnterState = enterState
 
 	return d
 }
