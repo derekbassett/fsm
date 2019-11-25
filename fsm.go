@@ -23,7 +23,7 @@
 // https://github.com/oxplot/fysom (forked at https://github.com/mriehl/fysom)
 //
 
-//go:generate genny -in=$GOFILE -out=gen-$GOFILE gen "EventType=string,int StateType=string,int"
+//go:generate genny -in=$GOFILE -out=gen-$GOFILE gen "EventType=string StateType=string"
 
 package fsm
 
@@ -80,9 +80,10 @@ type EventTypeStateTypeFiniteStateMachine struct {
 }
 
 type StateType generic.Type
-type EventType generic.Type
 
 type StateTypeStates []StateType
+
+type EventType generic.Type
 
 // Event represents an event when initializing the EventTypeStateTypeFiniteStateMachine.
 //
@@ -170,14 +171,9 @@ func NewEventTypeStateTypeFiniteStateMachine(initial StateType, events EventType
 	}
 
 	// Build transition map and store sets of all events and states.
-	allEvents := make(map[EventType]struct{})
-	allStates := make(map[StateType]struct{})
 	for _, e := range events {
 		src := e.Src
 		f.transitions[eKey{e.Label, src}] = e.Dst
-		allStates[src] = struct{}{}
-		allStates[e.Dst] = struct{}{}
-		allEvents[e.Label] = struct{}{}
 		if e.BeforeEvent != nil {
 			f.callbacks[cKey{e.Label, callbackBeforeEvent}] = e.BeforeEvent
 		}
@@ -192,54 +188,6 @@ func NewEventTypeStateTypeFiniteStateMachine(initial StateType, events EventType
 		}
 
 	}
-
-	//// Map all callbacks to events/states.
-	//for name, fn := range callbacks {
-	//	var target string
-	//	callbackType := callbackNone
-	//
-	//	switch {
-	//	case strings.HasPrefix(name, "before_"):
-	//		target = strings.TrimPrefix(name, "before_")
-	//		if target == "event" {
-	//			f.BeforeEvent = fn
-	//		} else if _, ok := allEvents[target]; ok {
-	//			callbackType = callbackBeforeEvent
-	//		}
-	//	case strings.HasPrefix(name, "leave_"):
-	//		target = strings.TrimPrefix(name, "leave_")
-	//		if target == "state" {
-	//			f.LeaveState = fn
-	//		} else if _, ok := allStates[target]; ok {
-	//			callbackType = callbackLeaveState
-	//		}
-	//	case strings.HasPrefix(name, "enter_"):
-	//		target = strings.TrimPrefix(name, "enter_")
-	//		if target == "state" {
-	//			f.EnterState = fn
-	//		} else if _, ok := allStates[target]; ok {
-	//			callbackType = callbackEnterState
-	//		}
-	//	case strings.HasPrefix(name, "after_"):
-	//		target = strings.TrimPrefix(name, "after_")
-	//		if target == "event" {
-	//			f.AfterEvent = fn
-	//		} else if _, ok := allEvents[target]; ok {
-	//			callbackType = callbackAfterEvent
-	//		}
-	//	default:
-	//		target = name
-	//		if _, ok := allStates[target]; ok {
-	//			callbackType = callbackEnterState
-	//		} else if _, ok := allEvents[target]; ok {
-	//			callbackType = callbackAfterEvent
-	//		}
-	//	}
-	//
-	//	if callbackType != callbackNone {
-	//		f.callbacks[cKey{target, callbackType}] = fn
-	//	}
-	//}
 
 	return f
 }
@@ -475,31 +423,3 @@ func (f *EventTypeStateTypeFiniteStateMachine) afterEventCallbacks(t Transition)
 	return nil
 }
 
-type transitionType int
-const (
-	callbackNone transitionType = iota
-	callbackBeforeEvent
-	callbackLeaveState
-	callbackEnterState
-	callbackAfterEvent
-)
-
-// cKey is a struct key used for keeping the callbacks mapped to a target.
-type cKey struct {
-	// target is either the name of a state or an event depending on which
-	// callback type the key refers to. It can also be "" for a non-targeted
-	// callback like before_event.
-	target interface{}
-
-	// callbackType is the situation when the callback will be run.
-	callbackType transitionType
-}
-
-// eKey is a struct key used for storing the transition map.
-type eKey struct {
-	// event is the name of the event that the keys refers to.
-	event EventType
-
-	// src is the source from where the event can transition.
-	src StateType
-}
